@@ -14,17 +14,19 @@ dy = Ly / (ny - 1)
 
 # Propriedades do fluido
 rho = 1.0
-nu = 0.01  # Aumentado para melhorar a estabilidade
+nu_molecular = 1e-5  # Viscosidade molecular
+nu_turbulenta = 1e-2  # Viscosidade turbulenta adicionada
+nu = nu_molecular + nu_turbulenta  # Viscosidade efetiva constante
 
 # Ângulo de ataque
-alpha = 0
+alpha = 40
 alpha_rad = np.radians(alpha)
 
 # Inicialização das variáveis
 u_in = np.cos(alpha_rad) * 1.0
 v_in = np.sin(alpha_rad) * 1.0
 
-u = np.ones((ny, nx)) * u_in  # Inicializado com a velocidade de entrada
+u = np.ones((ny, nx)) * u_in
 v = np.ones((ny, nx)) * v_in
 p = np.zeros((ny, nx))
 b = np.zeros((ny, nx))
@@ -63,7 +65,7 @@ u[airfoil_mask] = 0
 v[airfoil_mask] = 0
 
 # Parâmetros do critério CFL
-CFL = 0.05  # Reduzido para melhorar a estabilidade
+CFL = 0.05
 
 # Configuração para salvar os frames
 frames = []
@@ -72,12 +74,12 @@ plt.tight_layout()
 cbar = None
 
 # Loop principal de tempo
-nt = 5000  # Reduzido para teste; ajuste conforme necessário
-frame_interval = 100  # Capturar um frame a cada 100 iterações
+nt = 5000
+frame_interval = 10
 
 # Limites para dt
-dt_min = 1e-5
-dt_max = 1e-3  # Reduzido para melhorar a estabilidade
+dt_min = 1e-10
+dt_max = 1
 
 for n in range(nt):
     un = u.copy()
@@ -87,7 +89,7 @@ for n in range(nt):
     u_max = np.max(np.abs(un[1:-1,1:-1])) + 1e-5
     v_max = np.max(np.abs(vn[1:-1,1:-1])) + 1e-5
     dt = CFL * min(dx / u_max, dy / v_max)
-    dt = max(dt_min, min(dt, dt_max))  # Impõe limites em dt
+    dt = max(dt_min, min(dt, dt_max))
 
     # Construir o termo fonte b
     b[1:-1,1:-1] = rho * (
@@ -111,10 +113,10 @@ for n in range(nt):
         ) / (2 * (dx**2 + dy**2)) - dx**2 * dy**2 / (2 * (dx**2 + dy**2)) * b[1:-1,1:-1]
 
         # Condições de contorno para a pressão
-        p[:, -1] = p[:, -2]    # dp/dx = 0 na saída
-        p[:, 0] = p[:, 1]      # dp/dx = 0 na entrada
-        p[-1, :] = p[-2, :]    # dp/dy = 0 na fronteira superior
-        p[0, :] = p[1, :]      # dp/dy = 0 na fronteira inferior
+        p[:, -1] = p[:, -2]
+        p[:, 0] = p[:, 1]
+        p[-1, :] = p[-2, :]
+        p[0, :] = p[1, :]
 
         # Condições no aerofólio
         p[airfoil_mask] = 0
@@ -124,7 +126,7 @@ for n in range(nt):
         if erro < tol:
             break
 
-    # Atualizar as velocidades usando esquemas upwind de primeira ordem
+    # Atualização das velocidades com viscosidade efetiva constante
     u[1:-1,1:-1] = un[1:-1,1:-1] - dt * (
         un[1:-1,1:-1] * (un[1:-1,1:-1] - un[1:-1,0:-2]) / dx +
         vn[1:-1,1:-1] * (un[1:-1,1:-1] - un[0:-2,1:-1]) / dy
@@ -144,17 +146,14 @@ for n in range(nt):
     )
 
     # Aplicando condições de contorno
+    u[0, :] = u[1, :]
+    u[-1, :] = u[-2, :]
+    v[0, :] = v[1, :]
+    v[-1, :] = v[-2, :]
 
-    # Fronteiras superior e inferior (condições de deslizamento livre)
-    u[0, :] = u[1, :]        # du/dy = 0 na fronteira inferior
-    u[-1, :] = u[-2, :]      # du/dy = 0 na fronteira superior
-    v[0, :] = v[1, :]        # dv/dy = 0 na fronteira inferior
-    v[-1, :] = v[-2, :]      # dv/dy = 0 na fronteira superior
-
-    # Entrada e saída
-    u[:, 0] = u_in           # Velocidade de entrada
+    u[:, 0] = u_in
     v[:, 0] = v_in
-    u[:, -1] = u[:, -2]      # du/dx = 0 na saída
+    u[:, -1] = u[:, -2]
     v[:, -1] = v[:, -2]
 
     # Condições no aerofólio
@@ -178,8 +177,6 @@ for n in range(nt):
     # Captura de frames para o GIF
     if n % frame_interval == 0:
         # Remover o conteúdo anterior sem recriar a figura
-        for coll in ax.collections:
-            coll.remove()
         ax.clear()
         magnitude = np.sqrt(u**2 + v**2)
         contour = ax.contourf(X, Y, magnitude, levels=100, cmap=cm.jet)
@@ -200,6 +197,6 @@ for n in range(nt):
         frames.append(image)
 
 # Criar o GIF ao final da simulação
-imageio.mimsave('simulacao_aerofolio.gif', frames, fps=30)
+imageio.mimsave('40degrees.gif', frames, fps=30)
 
 print("Simulação concluída. O GIF foi salvo como 'simulacao_aerofolio.gif'.")
